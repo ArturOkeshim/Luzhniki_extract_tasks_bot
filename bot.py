@@ -17,6 +17,9 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
 )
+# Убираем шум от telegram (подключение, polling, получение update)
+logging.getLogger("telegram").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 editor = None
@@ -44,14 +47,27 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not text:
         return
 
+    chat_title = getattr(chat, "title", None) or chat.id
+    logger.info("Сообщение в чате «%s» (id=%s): %s", chat_title, chat.id, text[:200] + ("..." if len(text) > 200 else ""))
+
     try:
+        logger.info("Отправка в LLM на разбор (задача или нет)...")
         task_dict = Editor.extract_task_from_chat_message(text, client)
     except Exception as e:
         logger.exception("Ошибка LLM при разборе сообщения: %s", e)
         return
 
     if not task_dict:
+        logger.info("LLM: в сообщении задача не обнаружена, пропуск")
         return
+
+    logger.info(
+        "LLM: извлечена задача — «%s», ответственный=%s, срок=%s, приоритет=%s",
+        task_dict.get("task"),
+        task_dict.get("responsible"),
+        task_dict.get("deadline"),
+        task_dict.get("priority"),
+    )
 
     if not editor:
         logger.error("Editor не инициализирован (CREDENTIALS_PATH / SPREADSHEET_ID)")
@@ -59,8 +75,9 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     try:
-        editor.insert_info(task_dict)
+        row = editor.insert_info(task_dict)
         title = task_dict.get("task") or "Задача"
+        logger.info("Задача записана в таблицу, строка %s", row)
         await update.message.reply_text(f"Задача добавлена в таблицу: «{title}»")
     except Exception as e:
         logger.exception("Ошибка записи в таблицу: %s", e)
