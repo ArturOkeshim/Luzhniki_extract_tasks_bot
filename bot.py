@@ -26,6 +26,9 @@ editor = None
 if CREDENTIALS_PATH and SPREADSHEET_ID:
     editor = Editor(CREDENTIALS_PATH, SPREADSHEET_ID)
 
+# Ожидающие задачи без срока: (chat_id, user_id) -> {"task": формулировка, "task_dict": dict для insert_info}
+pending_tasks: dict[tuple[int, int], dict] = {}
+
 
 async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.message.text:
@@ -47,8 +50,52 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not text:
         return
 
+    chat_id = chat.id
+    user = update.effective_user
+    user_id = user.id if user else 0
     chat_title = getattr(chat, "title", None) or chat.id
-    logger.info("Сообщение в чате «%s» (id=%s): %s", chat_title, chat.id, text[:200] + ("..." if len(text) > 200 else ""))
+    logger.info("Сообщение в чате «%s» (id=%s): %s", chat_title, chat_id, text[:200] + ("..." if len(text) > 200 else ""))
+
+    # Есть ли ожидающая задача без срока от этого пользователя?
+    pending_key = (chat_id, user_id)
+    if pending_key in pending_tasks:
+        pending = pending_tasks[pending_key]
+        try:
+            follow_up = Editor.parse_follow_up_for_deadline(
+                pending["task"], text, client
+            )
+        except Exception as e:
+            logger.exception("Ошибка LLM при разборе ответа по сроку: %s", e)
+            await update.message.reply_text(
+                "Не удалось разобрать ответ. Укажите срок в формате дд.мм.гггг или напишите, что задачу пока не добавлять."
+            )
+            return
+        if follow_up["action"] == "add":
+            task_dict = {**pending["task_dict"], "deadline": follow_up["deadline"]}
+            del pending_tasks[pending_key]
+            if editor:
+                try:
+                    row = editor.insert_info(task_dict)
+                    title = task_dict.get("task") or "Задача"
+                    logger.info("Задача (со сроком из ответа) записана в таблицу, строка %s", row)
+                    await update.message.reply_text(f"Задача добавлена в таблицу: «{title}»")
+                except Exception as e:
+                    logger.exception("Ошибка записи в таблицу: %s", e)
+                    await update.message.reply_text("Не удалось записать задачу в таблицу.")
+            else:
+                await update.message.reply_text("Таблица не настроена, задачу записать нельзя.")
+            return
+        if follow_up["action"] == "decline":
+            del pending_tasks[pending_key]
+            await update.message.reply_text(
+                "Хорошо, задачу не добавляю. Если позже понадобится внести её в таблицу — напишите с указанием срока."
+            )
+            return
+        # unclear
+        await update.message.reply_text(
+            f"Не понял. Укажите срок для задачи «{pending['task']}» (например, 25.02.2025) или напишите, что задачу пока не добавлять."
+        )
+        return
 
     try:
         logger.info("Отправка в LLM на разбор (задача или нет)...")
@@ -68,6 +115,17 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         task_dict.get("deadline"),
         task_dict.get("priority"),
     )
+
+    # Задачу без срока в таблицу не ставим — запрашиваем срок и запоминаем задачу
+    if not task_dict.get("deadline"):
+        formulation = task_dict.get("task") or "Задача"
+        pending_tasks[pending_key] = {"task": formulation, "task_dict": task_dict}
+        logger.info("Задача без срока сохранена в ожидание: «%s»", formulation)
+        await update.message.reply_text(
+            f"По задаче «{formulation}» не указан срок. Ответьте на это сообщение, указав срок (например, 25.02.2025), или напишите, что срок пока неизвестен / задачу пока не добавлять.",
+            reply_to_message_id=update.message.message_id,
+        )
+        return
 
     if not editor:
         logger.error("Editor не инициализирован (CREDENTIALS_PATH / SPREADSHEET_ID)")

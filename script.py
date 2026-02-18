@@ -97,12 +97,13 @@ class Editor:
             (task_dict.get("task") or ""),
             (task_dict.get("category") or ""),
             (task_dict.get("responsible") or ""),
+            datetime.now().strftime("%d.%m.%Y %H:%M"),  # дата/время добавления (распознаётся в Таблице как дата)
             (task_dict.get("deadline") or ""),
             (task_dict.get("priority") or ""),
             (task_dict.get("comments") or ""),
         ]
         start_letter = self._col_number_to_letter(3)
-        end_letter = self._col_number_to_letter(9)
+        end_letter = self._col_number_to_letter(10)  # 8 колонок: C..J
         range_name = f"{start_letter}{next_row}:{end_letter}{next_row}"
         sheet.update(range_name, [row_data])
         # Возвращаем номер добавленной строки — удобно для последующей отмены.
@@ -207,7 +208,7 @@ class Editor:
   "responsible": "Имя ответственного в именительном падеже. Если не указано — null.",
   "deadline": "Дата в формате дд.мм.гггг (относительные формулировки переведи относительно сегодня). Если не указано — null.",
   "priority": "«высокий», «средний» или «низкий». Если не указано — null.",
-  "comments": "Комментарии, подзадачи, уточнения для исполнителя. Если нечего добавлять — null.",
+  "comments": "Оставь пустым, только если пользователь напрямую не просит что-то отметить в комментарии",
   "category": "Категория задачи, если из контекста понятна. Иначе null."
 }}
 
@@ -233,6 +234,49 @@ class Editor:
             "comments": data.get("comments"),
             "category": data.get("category"),
         }
+
+    @staticmethod
+    def parse_follow_up_for_deadline(
+        pending_task_formulation: str, message_text: str, client: OpenAI
+    ) -> dict:
+        """
+        Пользователь ранее отправил задачу без срока. Разобрать его новое сообщение:
+        указал ли он срок, отказался ли от добавления задачи, или ответ неясен.
+        Возвращает dict с полем "action": "add" | "decline" | "unclear"
+        и при action=="add" — "deadline": "дд.мм.гггг".
+        """
+        if not message_text or not message_text.strip():
+            return {"action": "unclear"}
+        today = datetime.now().strftime("%d.%m.%Y")
+        prompt = f"""Сегодняшняя дата: {today}
+
+Ранее пользователь поставил задачу (без срока): «{pending_task_formulation}»
+Его новое сообщение: «{message_text.strip()}»
+
+Определи по смыслу сообщения одно из трёх:
+1) Пользователь УКАЗЫВАЕТ СРОК для этой задачи (дата, «к пятнице», «через 2 дня», «до конца недели» и т.п.) → верни JSON: {{"action": "add", "deadline": "дд.мм.гггг"}}. Дата только в формате дд.мм.гггг, переведи относительные формулировки относительно сегодня.
+2) Пользователь ОТКАЗЫВАЕТСЯ от добавления задачи: говорит, что срок неизвестен, пока не ставить задачу, не добавлять, отмена и т.п. → верни JSON: {{"action": "decline"}}
+3) Непонятно или не относится к задаче → верни JSON: {{"action": "unclear"}}
+
+Ответ — только один JSON, без markdown и пояснений."""
+
+        response = client.chat.completions.create(
+            model="openai/gpt-5-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0,
+        )
+        text = response.choices[0].message.content.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1].lstrip("json").strip()
+        data = json.loads(text)
+        action = (data.get("action") or "unclear").strip().lower()
+        if action == "add":
+            deadline = (data.get("deadline") or "").strip()
+            if deadline:
+                return {"action": "add", "deadline": deadline}
+        if action == "decline":
+            return {"action": "decline"}
+        return {"action": "unclear"}
 
     def search_task_to_update(self, command: str, client: OpenAI, sheet_name=None) -> dict:
         """
