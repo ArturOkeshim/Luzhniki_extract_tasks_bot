@@ -12,6 +12,14 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 PROXY = os.getenv("TELEGRAM_PROXY")
 CREDENTIALS_PATH = os.getenv("CREDENTIALS_PATH", "calm-photon-486609-u4-96ce79c043ec.json")
 SPREADSHEET_ID = os.getenv("SPREADSHEET_ID")
+def _parse_allowed_chat_ids() -> set[int]:
+    raw = os.getenv("TELEGRAM_BOT_CHAT_ID", "").strip()
+    if not raw:
+        return set()
+    return {int(x.strip()) for x in raw.split(",") if x.strip()}
+
+
+ALLOWED_CHAT_IDS = _parse_allowed_chat_ids()
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -35,6 +43,8 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     chat = update.effective_chat
     if not chat or chat.type not in ("group", "supergroup"):
+        return
+    if ALLOWED_CHAT_IDS and chat.id not in ALLOWED_CHAT_IDS:
         return
     try:
         me = await context.bot.get_me()
