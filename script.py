@@ -6,6 +6,7 @@ from google.oauth2.service_account import Credentials
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+from zoneinfo import ZoneInfo
 
 load_dotenv()
 api_key = os.getenv("VSE_GPT_API")
@@ -97,7 +98,7 @@ class Editor:
             (task_dict.get("task") or ""),
             (task_dict.get("category") or ""),
             (task_dict.get("responsible") or ""),
-            datetime.now().strftime("%d.%m.%Y %H:%M"),  # дата/время добавления (распознаётся в Таблице как дата)
+            datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M"),  # дата/время добавления (распознаётся в Таблице как дата)
             (task_dict.get("deadline") or ""),
             (task_dict.get("priority") or ""),
             (task_dict.get("comments") or ""),
@@ -151,7 +152,7 @@ class Editor:
         Извлекает из команды пользователя структурированные данные для строки таблицы.
         Возвращает dict с полями: task, responsible, deadline, priority, comments.
         """
-        today = datetime.now().strftime("%d.%m.%Y")
+        today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
         prompt = f"""Сегодняшняя дата: {today}
 
 Пользователь прислал команду для создания задачи:
@@ -189,7 +190,7 @@ class Editor:
         """
         if not message_text or not message_text.strip():
             return None
-        today = datetime.now().strftime("%d.%m.%Y")
+        today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
         prompt = f"""Сегодняшняя дата: {today}
 
 Сообщение в рабочем чате:
@@ -247,7 +248,7 @@ class Editor:
         """
         if not message_text or not message_text.strip():
             return {"action": "unclear"}
-        today = datetime.now().strftime("%d.%m.%Y")
+        today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
         prompt = f"""Сегодняшняя дата: {today}
 
 Ранее пользователь поставил задачу (без срока): «{pending_task_formulation}»
@@ -301,7 +302,7 @@ class Editor:
 
         headers_help = ", ".join(headers)
 
-        today = datetime.now().strftime("%d.%m.%Y")
+        today = datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y")
         prompt = f"""Сегодняшняя дата: {today}
         
 Таблица задач (каждая строка с полем sheet_row — номер строки на листе):
