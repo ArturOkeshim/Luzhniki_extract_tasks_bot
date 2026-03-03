@@ -20,6 +20,8 @@ def _parse_allowed_chat_ids() -> set[int]:
 
 
 ALLOWED_CHAT_IDS = _parse_allowed_chat_ids()
+_raw_leader_id = os.getenv("TELEGRAM_BOT_LEADER_ID")
+ALLOWED_LEADER = int(_raw_leader_id) if _raw_leader_id else None
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -42,9 +44,12 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not update.message or not update.message.text:
         return
     chat = update.effective_chat
+    messenger = update.effective_user
     if not chat or chat.type not in ("group", "supergroup"):
         return
     if ALLOWED_CHAT_IDS and chat.id not in ALLOWED_CHAT_IDS:
+        return
+    if ALLOWED_LEADER is not None and messenger and messenger.id != ALLOWED_LEADER:
         return
     try:
         me = await context.bot.get_me()
