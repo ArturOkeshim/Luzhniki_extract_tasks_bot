@@ -1,7 +1,7 @@
 
 import gspread
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from google.oauth2.service_account import Credentials
 from openai import OpenAI
 from dotenv import load_dotenv
@@ -98,7 +98,7 @@ class Editor:
             (task_dict.get("task") or ""),
             (task_dict.get("category") or ""),
             (task_dict.get("responsible") or ""),
-            datetime.now(ZoneInfo("Europe/Moscow")).strftime("%d.%m.%Y %H:%M"),  # дата/время добавления (распознаётся в Таблице как дата)
+            (datetime.now(ZoneInfo("Europe/Moscow")) - timedelta(hours=1)).strftime("%d.%m.%Y %H:%M"),  # TODO: временный костыль −1 ч
             (task_dict.get("deadline") or ""),
             (task_dict.get("priority") or ""),
             (task_dict.get("comments") or ""),

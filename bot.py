@@ -47,10 +47,10 @@ async def on_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     messenger = update.effective_user
     if not chat or chat.type not in ("group", "supergroup"):
         return
-    if ALLOWED_CHAT_IDS and chat.id not in ALLOWED_CHAT_IDS:
-        return
-    if ALLOWED_LEADER is not None and messenger and messenger.id != ALLOWED_LEADER:
-        return
+    #if ALLOWED_CHAT_IDS and chat.id not in ALLOWED_CHAT_IDS:
+    #    return
+    #if ALLOWED_LEADER is not None and messenger and messenger.id != ALLOWED_LEADER:
+    #    return
     try:
         me = await context.bot.get_me()
         member = await context.bot.get_chat_member(chat.id, me.id)
