@@ -1,0 +1,26 @@
+[Unit]
+Description=Luzhniki Telegram Tasks Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/luzhniki_chat_tasks_extractor
+ExecStart=/root/luzhniki_chat_tasks_extractor/venv/bin/python bot.py
+
+Environment=PYTHONUNBUFFERED=1
+Environment=LANG=C.UTF-8
+
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=luzhniki-tasks-bot
+
+[Install]
+WantedBy=multi-user.target
